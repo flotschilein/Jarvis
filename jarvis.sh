@@ -36,7 +36,9 @@ import json
 import os
 import sys
 
-prompt = os.environ["QUESTION"]
+prompt = os.environ.get("QUESTION")
+if not prompt:
+    raise KeyError("QUESTION")
 print(json.dumps({
     "model": os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
     "messages": [{"role": "user", "content": prompt}],
@@ -44,15 +46,22 @@ print(json.dumps({
 PY
 )
 
-    local auth_header
-    auth_header=<(printf 'Authorization: Bearer %s\n' "$OPENAI_API_KEY")
+    local auth_header_file
+    auth_header_file=$(mktemp) || {
+        echo "Failed to create a temporary file for the auth header." >&2
+        return 1
+    }
+    chmod 600 "$auth_header_file"
+    printf 'Authorization: Bearer %s\n' "$OPENAI_API_KEY" >"$auth_header_file"
 
     local response
     response=$(curl -sS -X POST "https://api.openai.com/v1/chat/completions" \
+        --connect-timeout 10 --max-time 60 \
         -H "Content-Type: application/json" \
-        -H @"$auth_header" \
+        -H @"$auth_header_file" \
         -d "$payload")
     local curl_status=$?
+    rm -f "$auth_header_file"
     if ((curl_status != 0)); then
         echo "Failed to reach the OpenAI API (exit code $curl_status)." >&2
         return $curl_status
@@ -66,10 +75,19 @@ raw = sys.stdin.read()
 MAX_ERROR_DISPLAY_LENGTH = 500
 try:
     data = json.loads(raw)
-    choices = data.get("choices") or []
-    first_choice = choices[0] if isinstance(choices, list) and len(choices) > 0 else {}
+    if not isinstance(data, dict):
+        raise ValueError("response is not an object")
+
+    choices = data.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise ValueError("choices list missing or empty")
+
+    first_choice = choices[0]
     message = first_choice.get("message") if isinstance(first_choice, dict) else None
-    content = message.get("content") if isinstance(message, dict) else None
+    if not isinstance(message, dict):
+        raise ValueError("message is missing")
+
+    content = message.get("content")
 
     if content:
         print(content.strip())
