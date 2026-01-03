@@ -104,9 +104,12 @@ try:
     if content:
         print(content.strip())
     else:
-        raise KeyError("content")
+        raise KeyError("OpenAI response missing content field")
 except Exception as exc:
-    sys.stderr.write("Unexpected OpenAI response: {}\n".format(exc))
+    error_text = str(exc)
+    if len(error_text) > MAX_ERROR_DISPLAY_LENGTH:
+        error_text = error_text[:MAX_ERROR_DISPLAY_LENGTH] + "...(truncated)"
+    sys.stderr.write("Unexpected OpenAI response: {}\n".format(error_text))
     sys.exit(1)
 PY
 }
