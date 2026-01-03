@@ -38,20 +38,25 @@ ask_openai() {
     fi
 
     local payload
-    payload=$(QUESTION="$question" python3 - <<'PY'
+    payload=$(printf '%s' "$question" | python3 - <<'PY'
 import json
 import os
 import sys
 
-prompt = os.environ.get("QUESTION")
+prompt = sys.stdin.read()
 if not prompt:
-    raise KeyError("QUESTION")
+    raise ValueError("Missing question input")
 print(json.dumps({
     "model": os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
     "messages": [{"role": "user", "content": prompt}],
 }))
 PY
 )
+    local payload_status=$?
+    if ((payload_status != 0)) || [[ -z "$payload" ]]; then
+        echo "Failed to build OpenAI request payload." >&2
+        return 1
+    fi
 
     local auth_header_file
     local old_umask
@@ -104,7 +109,7 @@ try:
     if content:
         print(content.strip())
     else:
-        raise KeyError("OpenAI response missing content field")
+        raise ValueError("OpenAI response missing content field")
 except Exception as exc:
     error_text = str(exc)
     if len(error_text) > MAX_ERROR_DISPLAY_LENGTH:
