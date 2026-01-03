@@ -51,12 +51,13 @@ PY
 import json
 import sys
 
+raw = sys.stdin.read()
 try:
-    data = json.load(sys.stdin)
+    data = json.loads(raw)
     print(data["choices"][0]["message"]["content"].strip())
-except Exception as exc:  # noqa: BLE001
-    sys.stderr.write(f"Could not parse OpenAI response: {exc}\n")
-    sys.stdout.write(json.dumps(data, indent=2))
+except Exception as exc:
+    sys.stderr.write("Could not parse OpenAI response: {}\n".format(exc))
+    sys.stdout.write(raw)
     sys.exit(1)
 PY
 }
