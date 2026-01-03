@@ -12,7 +12,7 @@ vscode_cmd="code"
 chrome_cmd="flatpak run com.google.Chrome"
 
 ask_openai() {
-    local question="$1"
+    local question="$*"
 
     if [[ -z "$question" ]]; then
         echo "Usage: $0 --ask \"your question\"" >&2
@@ -42,10 +42,12 @@ PY
     response=$(curl -sS -X POST "https://api.openai.com/v1/chat/completions" \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer $OPENAI_API_KEY" \
-        -d "$payload") || {
-        echo "Failed to reach the OpenAI API." >&2
-        return 1
-    }
+        -d "$payload")
+    local curl_status=$?
+    if ((curl_status != 0)); then
+        echo "Failed to reach the OpenAI API (exit code $curl_status)." >&2
+        return $curl_status
+    fi
 
     echo "$response" | python3 - <<'PY'
 import json
@@ -54,9 +56,17 @@ import sys
 raw = sys.stdin.read()
 try:
     data = json.loads(raw)
-    print(data["choices"][0]["message"]["content"].strip())
+    choices = data.get("choices") or []
+    first_choice = choices[0] if choices else {}
+    message = first_choice.get("message") if isinstance(first_choice, dict) else None
+    content = message.get("content") if isinstance(message, dict) else None
+
+    if content:
+        print(content.strip())
+    else:
+        raise KeyError("content")
 except Exception as exc:
-    sys.stderr.write("Could not parse OpenAI response: {}\n".format(exc))
+    sys.stderr.write("Unexpected OpenAI response: {}\n".format(exc))
     sys.stdout.write(raw)
     sys.exit(1)
 PY
@@ -64,7 +74,7 @@ PY
 
 if [[ "$1" == "--ask" || "$1" == "-q" ]]; then
     shift
-    ask_openai "$*"
+    ask_openai "$@"
     exit $?
 fi
 
