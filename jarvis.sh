@@ -44,20 +44,15 @@ print(json.dumps({
 PY
 )
 
-    local auth_header_file
-    auth_header_file=$(mktemp) || {
-        echo "Failed to create a temporary file for the auth header." >&2
-        return 1
-    }
-    printf 'Authorization: Bearer %s\n' "$OPENAI_API_KEY" >"$auth_header_file"
+    local auth_header
+    auth_header=<(printf 'Authorization: Bearer %s\n' "$OPENAI_API_KEY")
 
     local response
     response=$(curl -sS -X POST "https://api.openai.com/v1/chat/completions" \
         -H "Content-Type: application/json" \
-        -H "@$auth_header_file" \
+        -H @"$auth_header" \
         -d "$payload")
     local curl_status=$?
-    rm -f "$auth_header_file"
     if ((curl_status != 0)); then
         echo "Failed to reach the OpenAI API (exit code $curl_status)." >&2
         return $curl_status
@@ -72,7 +67,7 @@ MAX_ERROR_DISPLAY_LENGTH = 500
 try:
     data = json.loads(raw)
     choices = data.get("choices") or []
-    first_choice = choices[0] if len(choices) > 0 else {}
+    first_choice = choices[0] if isinstance(choices, list) and len(choices) > 0 else {}
     message = first_choice.get("message") if isinstance(first_choice, dict) else None
     content = message.get("content") if isinstance(message, dict) else None
 
