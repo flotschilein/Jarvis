@@ -11,6 +11,9 @@ code_folder="/homeofcode"
 vscode_cmd="code"
 chrome_cmd="flatpak run com.google.Chrome"
 
+MAX_QUESTION_LENGTH=${MAX_QUESTION_LENGTH:-8000}
+MAX_ERROR_DISPLAY_LENGTH=${MAX_ERROR_DISPLAY_LENGTH:-500}
+
 ask_openai() {
     local question="$*"
 
@@ -19,9 +22,13 @@ ask_openai() {
         return 1
     fi
 
-    local max_question_length=8000
-    if (( ${#question} > max_question_length )); then
-        echo "Question is too long (max ${max_question_length} characters)." >&2
+    if printf '%s' "$question" | LC_ALL=C grep -q '[[:cntrl:]]'; then
+        echo "Question contains unsupported control characters." >&2
+        return 1
+    fi
+
+    if (( ${#question} > MAX_QUESTION_LENGTH )); then
+        echo "Question is too long (max ${MAX_QUESTION_LENGTH} characters)." >&2
         return 1
     fi
 
@@ -47,11 +54,15 @@ PY
 )
 
     local auth_header_file
+    local old_umask
+    old_umask=$(umask)
+    umask 077
     auth_header_file=$(mktemp) || {
         echo "Failed to create a temporary file for the auth header." >&2
+        umask "$old_umask"
         return 1
     }
-    chmod 600 "$auth_header_file"
+    umask "$old_umask"
     printf 'Authorization: Bearer %s\n' "$OPENAI_API_KEY" >"$auth_header_file"
 
     local response
@@ -69,10 +80,11 @@ PY
 
     echo "$response" | python3 - <<'PY'
 import json
+import os
 import sys
 
 raw = sys.stdin.read()
-MAX_ERROR_DISPLAY_LENGTH = 500
+MAX_ERROR_DISPLAY_LENGTH = int(os.environ.get("MAX_ERROR_DISPLAY_LENGTH", "500"))
 try:
     data = json.loads(raw)
     if not isinstance(data, dict):
@@ -95,9 +107,6 @@ try:
         raise KeyError("content")
 except Exception as exc:
     sys.stderr.write("Unexpected OpenAI response: {}\n".format(exc))
-    if raw:
-        display = raw if len(raw) <= MAX_ERROR_DISPLAY_LENGTH else raw[:MAX_ERROR_DISPLAY_LENGTH] + "...(truncated)"
-        sys.stderr.write(display + "\n")
     sys.exit(1)
 PY
 }
