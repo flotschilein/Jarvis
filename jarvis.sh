@@ -19,8 +19,9 @@ ask_openai() {
         return 1
     fi
 
-    if (( ${#question} > 8000 )); then
-        echo "Question is too long (max 8000 characters)." >&2
+    local max_question_length=8000
+    if (( ${#question} > max_question_length )); then
+        echo "Question is too long (max ${max_question_length} characters)." >&2
         return 1
     fi
 
@@ -67,10 +68,11 @@ import json
 import sys
 
 raw = sys.stdin.read()
+MAX_ERROR_DISPLAY_LENGTH = 500
 try:
     data = json.loads(raw)
     choices = data.get("choices") or []
-    first_choice = choices[0] if choices else {}
+    first_choice = choices[0] if len(choices) > 0 else {}
     message = first_choice.get("message") if isinstance(first_choice, dict) else None
     content = message.get("content") if isinstance(message, dict) else None
 
@@ -81,8 +83,7 @@ try:
 except Exception as exc:
     sys.stderr.write("Unexpected OpenAI response: {}\n".format(exc))
     if raw:
-        max_len = 500
-        display = raw if len(raw) <= max_len else raw[:max_len] + "...(truncated)"
+        display = raw if len(raw) <= MAX_ERROR_DISPLAY_LENGTH else raw[:MAX_ERROR_DISPLAY_LENGTH] + "...(truncated)"
         sys.stderr.write(display + "\n")
     sys.exit(1)
 PY
